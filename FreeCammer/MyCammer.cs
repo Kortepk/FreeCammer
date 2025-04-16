@@ -22,7 +22,7 @@ namespace FreeCammer
     {
         public const string modGUID = "grug.lethalcompany.freecammer";
         public const string modName = "Free Cammer";
-        public const string modVersion = "0.1.2.2";
+        public const string modVersion = "0.1.2.3";
         public static ConfigEntry<string> enterCam;
         public static ConfigEntry<bool> fpsCam;
         public static ConfigEntry<int> mouseButton;

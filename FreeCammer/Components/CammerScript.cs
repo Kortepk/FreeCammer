@@ -38,7 +38,10 @@ namespace FreeCammer.Scripts
         public List<string> intensKeyList = MyCammer.intensityControls.Value.Split(' ').ToList();
         public int beforeCamLayerVal;
         public Camera beforeCamCamera;
-        private Vector3 rotateValue;
+        private Vector3 targetEulerRotation;
+        private Vector3 currentEulerRotation;
+        public float rotationSmoothTime = 0.4f;  // Smoothing time (the shorter, the sharper)
+        public float mouseSensitivity = 2.0f;    // Mouse sensitivity
         public void Awake()
         {
             MyCammer.mls.LogInfo("Script Active");
@@ -134,21 +137,39 @@ namespace FreeCammer.Scripts
                 lightHolder.SetActive(false);
                 MyCammer.mls.LogInfo("Light spawned");
             }
-            if (UnityInput.Current.GetMouseButton(MyCammer.mouseButton.Value) || MyCammer.fpsCam.Value)
+            if (inCammer) 
             {
-                //rotateValue = new Vector3(mouseDeltaY, mouseDeltaX * -1) * 0.1f;
-                //rotateValue = new Vector3(y, x * -1) * 0.1f;
-                rotateValue = new Vector3(Mouse.current.delta.y.value, Mouse.current.delta.x.value * -1) * 0.1f;
-                transform.eulerAngles = transform.eulerAngles - rotateValue;
-                
-            }
-            if (transform.eulerAngles.x + 5 >= 89 && transform.localEulerAngles.x < 270)
-            {
-                transform.eulerAngles = new Vector3(84, transform.eulerAngles.y, 0);
-            }
-            if (transform.eulerAngles.x - 5 <= 271 && transform.localEulerAngles.x > 90)
-            {
-                transform.eulerAngles = new Vector3(276, transform.eulerAngles.y, 0);
+                if (UnityInput.Current.GetMouseButton(MyCammer.mouseButton.Value) || MyCammer.fpsCam.Value)
+                {
+                    Vector2 mouseDelta = Mouse.current.delta.value;
+                    
+                    // Multiplying the mouse delta by sensitivity
+                    targetEulerRotation.x -= mouseDelta.y * mouseSensitivity * 0.01f; // 0.01f для тонкой настройки
+                    targetEulerRotation.y += mouseDelta.x * mouseSensitivity * 0.01f;
+
+                    // We limit the angle by X (so that the camera does not flip over)
+                    float targetX = targetEulerRotation.x;
+
+                    if (targetX > 180)
+                        targetX -= 360;
+
+                    targetEulerRotation.x = Mathf.Clamp(
+                        targetX,
+                        - 85f,
+                        85f
+                    );
+
+                    //MyCammer.mls.LogInfo($"Mouse Delta: {mouseDelta}, Sensitivity: {mouseSensitivity}");
+                }
+
+                // Smooth angle interpolation
+                currentEulerRotation = new Vector3(
+                LerpAngle(currentEulerRotation.x, targetEulerRotation.x, Time.deltaTime / rotationSmoothTime),
+                    LerpAngle(currentEulerRotation.y, targetEulerRotation.y, Time.deltaTime / rotationSmoothTime),
+                    0
+                );
+
+                transform.eulerAngles = currentEulerRotation;
             }
                 
             if (UnityInput.Current.GetKeyDown(MyCammer.enterCam.Value))
@@ -219,8 +240,19 @@ namespace FreeCammer.Scripts
                     Cursor.lockState = CursorLockMode.Locked;
                 }
             }
-            speed += UnityInput.Current.mouseScrollDelta.y * speedMult;
-            if (speed <= 0) speed = 5f;
+            float mouseScroll = UnityInput.Current.mouseScrollDelta.y;
+
+            if(mouseScroll != 0) {
+                // Mouse scroll delta returns ±120 per wheel click (Windows API standard),  
+                // so we normalize it to ±1 for easier handling.  
+                float tmp = mouseScroll/120 * speedMult;
+
+                speed += tmp;
+                //MyCammer.mls.LogInfo($"delta = {tmp}, speed = {speed}");
+
+                if (speed <= 1) speed = 1f;
+            }
+
             if (UnityInput.Current.GetKeyDown(isKeyValid(intensKeyList[0])) && !MyCammer.tapOrHold.Value) intensity += 10;
             if (UnityInput.Current.GetKeyDown(isKeyValid(intensKeyList[1])) && !MyCammer.tapOrHold.Value) intensity -= 10;
             if (UnityInput.Current.GetKey(isKeyValid(intensKeyList[0])) && MyCammer.tapOrHold.Value) intensity += 1;
@@ -241,6 +273,24 @@ namespace FreeCammer.Scripts
                 lod1.layer = inCammer || StartOfRound.Instance.activeCamera != me.gameplayCamera ? 0 : 5;
             }
         }
+
+        // Custom function for smooth angle interpolation
+        private float LerpAngle(float a, float b, float t)
+        {
+            // We bring the angles to the range [0, 360)
+            a = Mathf.Repeat(a, 360);
+            b = Mathf.Repeat(b, 360);
+
+            // Choosing the shortest path
+            if (Mathf.Abs(b - a) > 180)
+            {
+                if (b > a) a += 360;
+                else b += 360;
+            }
+
+            return Mathf.Lerp(a, b, t) % 360;
+        }
+
         public void ChangeStates()
         {
             beforeCamLayerVal = lod1.layer;
