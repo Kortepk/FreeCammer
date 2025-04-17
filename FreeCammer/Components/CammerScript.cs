@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
@@ -19,7 +20,7 @@ namespace FreeCammer.Scripts
         public bool inCammer = false;
         public float speed = 10.0f;
         public float intensity = 50f;
-        public float speedMult = 0.5f;
+        public float speedMult = 2f;
         public Camera cammer;
         public AudioListener ears;
         public Light light;
@@ -40,13 +41,29 @@ namespace FreeCammer.Scripts
         public Camera beforeCamCamera;
         private Vector3 targetEulerRotation;
         private Vector3 currentEulerRotation;
-        public float rotationSmoothTime = 0.4f;  // Smoothing time (the shorter, the sharper)
-        public float mouseSensitivity = 2.0f;    // Mouse sensitivity
+        public float mouseSensitivity = 4.0f;    // Mouse sensitivity
         public void Awake()
         {
             MyCammer.mls.LogInfo("Script Active");
             instance = this;
         }
+
+
+        // Retrieves the mouse look sensitivity from the game's settings.
+        // Falls back to default value if settings aren't available.
+        private float GetGameLookSensitivity()
+        {
+            // First check if the game settings instance exists and is initialized
+            if (IngamePlayerSettings.Instance != null && IngamePlayerSettings.Instance.settings != null)
+            {
+                // Return the actual sensitivity value from game settings
+                return IngamePlayerSettings.Instance.settings.lookSensitivity;
+            }
+
+            // Fallback to default sensitivity (10f matches the game's base value)
+            return 10f;
+        }
+
         public void Update() 
         {
             
@@ -144,7 +161,7 @@ namespace FreeCammer.Scripts
                     Vector2 mouseDelta = Mouse.current.delta.value;
                     
                     // Multiplying the mouse delta by sensitivity
-                    targetEulerRotation.x -= mouseDelta.y * mouseSensitivity * 0.01f; // 0.01f для тонкой настройки
+                    targetEulerRotation.x -= mouseDelta.y * mouseSensitivity * 0.01f; 
                     targetEulerRotation.y += mouseDelta.x * mouseSensitivity * 0.01f;
 
                     // We limit the angle by X (so that the camera does not flip over)
@@ -163,13 +180,20 @@ namespace FreeCammer.Scripts
                 }
 
                 // Smooth angle interpolation
-                currentEulerRotation = new Vector3(
-                LerpAngle(currentEulerRotation.x, targetEulerRotation.x, Time.deltaTime / rotationSmoothTime),
-                    LerpAngle(currentEulerRotation.y, targetEulerRotation.y, Time.deltaTime / rotationSmoothTime),
-                    0
-                );
+                if (MyCammer.rotationSmoothTime.Value > 0)
+                {
+                    currentEulerRotation = new Vector3(
+                    LerpAngle(currentEulerRotation.x, targetEulerRotation.x, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
+                        LerpAngle(currentEulerRotation.y, targetEulerRotation.y, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
+                        0
+                    );
+                }
+                else
+                {
+                    currentEulerRotation = targetEulerRotation;
+                }
 
-                transform.eulerAngles = currentEulerRotation;
+                cammer.transform.eulerAngles = currentEulerRotation;
             }
                 
             if (UnityInput.Current.GetKeyDown(MyCammer.enterCam.Value))
@@ -178,10 +202,18 @@ namespace FreeCammer.Scripts
                 {
                     beforeCamCamera = StartOfRound.Instance.activeCamera;
                 }
+
+                mouseSensitivity = GetGameLookSensitivity();
+                //MyCammer.mls.LogInfo($"Sensitivity: {mouseSensitivity}");
+
                 if (me != null && !me.isPlayerDead)
                 {
                     cammer.transform.position = me.gameplayCamera.transform.position;
                     cammer.transform.rotation = me.gameplayCamera.transform.rotation;
+
+                    targetEulerRotation = cammer.transform.eulerAngles;
+                    currentEulerRotation = cammer.transform.eulerAngles;
+
                 }
                 else if (me != null && me.isPlayerDead)
                 {

@@ -22,7 +22,7 @@ namespace FreeCammer
     {
         public const string modGUID = "grug.lethalcompany.freecammer";
         public const string modName = "Free Cammer";
-        public const string modVersion = "0.1.2.3";
+        public const string modVersion = "0.1.2.4";
         public static ConfigEntry<string> enterCam;
         public static ConfigEntry<bool> fpsCam;
         public static ConfigEntry<int> mouseButton;
@@ -31,6 +31,7 @@ namespace FreeCammer
         public static ConfigEntry<string> intensityControls;
         public static ConfigEntry<string> showCursorBind;
         public static ConfigEntry<bool> tapOrHold;
+        public static ConfigEntry<float> rotationSmoothTime; // Smoothing time (the shorter, the sharper)
         public static ConfigEntry<KeyCode> dummy;
         private static GameObject cammerHolder;
         
@@ -46,6 +47,7 @@ namespace FreeCammer
             enterCam = Config.Bind("Keybinds","Camera Activation", "Z", "The key used to enter the camera(google a list of keycodes if you want a specific key)");
             fpsCam = Config.Bind("General", "First person Freecammer", true, "Whether or not rotating requires you to hold right click");
             tapOrHold = Config.Bind("General", "Hold to increase brightness", false, "Set to true for holding the key down in order to increase brightness");
+            rotationSmoothTime = Config.Bind("General", "Smoothing time", 0.4f, " The duration in seconds that the camera takes to smoothly transition from one angle to another. A shorter value results in sharper, more immediate camera movements, while a longer value provides a smoother, more gradual rotation. Value >= 0");
             showCursorBind = Config.Bind("Keybinds", "Key to show cursor", "X", "Pressing this key while in freecam will show your cursor");
             camControls = Config.Bind("Keybinds", "WASD controls for camera","U H J K","Format the 4 keys you wish to use as the default, and it should work. If not, double check the spelling. Check the bottom of the config for options!");
             intensityControls = Config.Bind("Keybinds", "Keys to increase light brightness", "Comma Period", "The keys used to increase and decrease light brightness!");
