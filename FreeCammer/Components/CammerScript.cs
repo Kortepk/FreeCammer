@@ -18,9 +18,9 @@ namespace FreeCammer.Scripts
     {
         public static CammerScript instance;
         public bool inCammer = false;
-        public float moveSpeed = 1000f;
+        public float moveSpeed = 10f;
         public float intensity = 50f;
-        public float speedMult = 500f;
+        public float speedMult = 2f;
         public Camera cammer;
         public AudioListener ears;
         public Light light;
@@ -43,6 +43,7 @@ namespace FreeCammer.Scripts
         private Vector3 currentEulerRotation;
         public float mouseSensitivity = 4.0f;    // Mouse sensitivity
 
+        private Vector3 targetPosition;
         private Vector3 currentVelocity;
 
         public void Awake()
@@ -213,24 +214,27 @@ namespace FreeCammer.Scripts
                 {
                     cammer.transform.position = me.gameplayCamera.transform.position;
                     cammer.transform.rotation = me.gameplayCamera.transform.rotation;
-
-                    targetEulerRotation = cammer.transform.eulerAngles;
-                    currentEulerRotation = cammer.transform.eulerAngles;
-                    float targetX = currentEulerRotation.x;
-                    if (targetX > 180)
-                        targetX -= 360;
-
-                    currentEulerRotation.x = Mathf.Clamp(
-                        targetX,
-                        -85f,
-                        85f
-                    );
                 }
                 else if (me != null && me.isPlayerDead)
                 {
                     cammer.transform.position = me.playersManager.spectateCamera.transform.position;
                     cammer.transform.rotation = me.playersManager.spectateCamera.transform.rotation;
                 }
+
+                targetPosition = cammer.transform.position;
+
+                targetEulerRotation = cammer.transform.eulerAngles;
+                currentEulerRotation = cammer.transform.eulerAngles;
+                float targetX = currentEulerRotation.x;
+                if (targetX > 180)
+                    targetX -= 360;
+
+                currentEulerRotation.x = Mathf.Clamp(
+                    targetX,
+                    -85f,
+                    85f
+                );
+
                 cammer.enabled = !cammer.enabled;
                 inCammer = !inCammer;
 
@@ -279,7 +283,7 @@ namespace FreeCammer.Scripts
                 moveSpeed += tmp;
                 //MyCammer.mls.LogInfo($"delta = {tmp}, speed = {speed}");
 
-                if (moveSpeed <= 500) moveSpeed = 500f;
+                if (moveSpeed <= 1) moveSpeed = 1f;
             }
 
             if (UnityInput.Current.GetKeyDown(isKeyValid(intensKeyList[0])) && !MyCammer.tapOrHold.Value) intensity += 10;
@@ -306,6 +310,8 @@ namespace FreeCammer.Scripts
         // Add this method to handle movement
         private void HandleSmoothMovement()
         {
+            if (!inCammer) return;
+
             // Calculating the motion vector based on the input
             Vector3 moveInput = Vector3.zero;
 
@@ -321,8 +327,9 @@ namespace FreeCammer.Scripts
             // Convert to world coordinates relative to the camera
             moveInput = cammer.transform.TransformDirection(moveInput);
 
-            // Calculating the target offset (without accumulation)
-            Vector3 targetOffset = moveInput * moveSpeed * Time.deltaTime;
+            // Shift accumulation (0.01 - sensitivity)
+            Vector3 frameOffset = moveInput * moveSpeed * Time.deltaTime;
+            targetPosition += frameOffset;
 
             // Smoothly move the camera to the new position
             if (MyCammer.moveSmoothTime.Value > 0)
@@ -330,16 +337,20 @@ namespace FreeCammer.Scripts
                 // Smooth movement
                 cammer.transform.position = Vector3.SmoothDamp(
                     cammer.transform.position,
-                    cammer.transform.position + targetOffset,
+                    targetPosition,
                     ref currentVelocity,
-                    MyCammer.moveSmoothTime.Value
+                    MyCammer.moveSmoothTime.Value,
+                    maxSpeed: moveSpeed / MyCammer.moveSmoothTime.Value // Maximum speed limit
                 );
+                //MyCammer.mls.LogInfo($"pos = {cammer.transform.position}, target = {targetPosition} speed = {currentVelocity}");
             }
             else
             {
                 // Sudden movement without smoothness
-                cammer.transform.position += targetOffset;
+                cammer.transform.position = targetPosition;
+                currentVelocity = frameOffset / Time.deltaTime; // Updating the speed
             }
+
         }
 
         public void ChangeStates()
@@ -409,7 +420,7 @@ namespace FreeCammer.Scripts
                     fog.enabled.overrideState = !fog.enabled.overrideState;
                     fog.enabled.value = !fog.enabled.value;
                 }
-                if (GUILayout.Button("Reset Speed")) moveSpeed = 1000f;
+                if (GUILayout.Button("Reset Speed")) moveSpeed = 10f;
                 if (GUILayout.Button("Reset Light")) intensity = 50f;
                 if (killme)
                 {
