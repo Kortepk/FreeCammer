@@ -18,9 +18,9 @@ namespace FreeCammer.Scripts
     {
         public static CammerScript instance;
         public bool inCammer = false;
-        public float speed = 10.0f;
+        public float moveSpeed = 1000f;
         public float intensity = 50f;
-        public float speedMult = 2f;
+        public float speedMult = 500f;
         public Camera cammer;
         public AudioListener ears;
         public Light light;
@@ -42,6 +42,9 @@ namespace FreeCammer.Scripts
         private Vector3 targetEulerRotation;
         private Vector3 currentEulerRotation;
         public float mouseSensitivity = 4.0f;    // Mouse sensitivity
+
+        private Vector3 currentVelocity;
+
         public void Awake()
         {
             MyCammer.mls.LogInfo("Script Active");
@@ -183,8 +186,8 @@ namespace FreeCammer.Scripts
                 if (MyCammer.rotationSmoothTime.Value > 0)
                 {
                     currentEulerRotation = new Vector3(
-                    LerpAngle(currentEulerRotation.x, targetEulerRotation.x, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
-                        LerpAngle(currentEulerRotation.y, targetEulerRotation.y, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
+                        Mathf.Lerp(currentEulerRotation.x, targetEulerRotation.x, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
+                        Mathf.Lerp(currentEulerRotation.y, targetEulerRotation.y, Time.deltaTime / MyCammer.rotationSmoothTime.Value),
                         0
                     );
                 }
@@ -213,7 +216,15 @@ namespace FreeCammer.Scripts
 
                     targetEulerRotation = cammer.transform.eulerAngles;
                     currentEulerRotation = cammer.transform.eulerAngles;
+                    float targetX = currentEulerRotation.x;
+                    if (targetX > 180)
+                        targetX -= 360;
 
+                    currentEulerRotation.x = Mathf.Clamp(
+                        targetX,
+                        -85f,
+                        85f
+                    );
                 }
                 else if (me != null && me.isPlayerDead)
                 {
@@ -229,23 +240,9 @@ namespace FreeCammer.Scripts
                 }
                 ChangeStates();
             }
-            
-            if (UnityInput.Current.GetKey(isKeyValid(keyList[0])))
-            {
-                cammer.transform.position += cammer.transform.forward * speed * Time.deltaTime;
-            }
-            if (UnityInput.Current.GetKey(isKeyValid(keyList[2])))
-            {
-                cammer.transform.position -= cammer.transform.forward * speed * Time.deltaTime;
-            }
-            if (UnityInput.Current.GetKey(isKeyValid(keyList[1])))
-            {
-                cammer.transform.position -= cammer.transform.right * speed * Time.deltaTime;
-            }
-            if (UnityInput.Current.GetKey(isKeyValid(keyList[3])))
-            {
-                cammer.transform.position += cammer.transform.right * speed * Time.deltaTime;
-            }
+
+            HandleSmoothMovement();
+
             if (light != null && cammer != null && MyCammer.fullbrightMethod.Value)
             {
                 //light.transform.localEulerAngles = new Vector3(cammer.transform.localEulerAngles.x + 90,cammer.transform.localEulerAngles.y, 0);
@@ -279,10 +276,10 @@ namespace FreeCammer.Scripts
                 // so we normalize it to ±1 for easier handling.  
                 float tmp = mouseScroll/120 * speedMult;
 
-                speed += tmp;
+                moveSpeed += tmp;
                 //MyCammer.mls.LogInfo($"delta = {tmp}, speed = {speed}");
 
-                if (speed <= 1) speed = 1f;
+                if (moveSpeed <= 500) moveSpeed = 500f;
             }
 
             if (UnityInput.Current.GetKeyDown(isKeyValid(intensKeyList[0])) && !MyCammer.tapOrHold.Value) intensity += 10;
@@ -306,21 +303,43 @@ namespace FreeCammer.Scripts
             }
         }
 
-        // Custom function for smooth angle interpolation
-        private float LerpAngle(float a, float b, float t)
+        // Add this method to handle movement
+        private void HandleSmoothMovement()
         {
-            // We bring the angles to the range [0, 360)
-            a = Mathf.Repeat(a, 360);
-            b = Mathf.Repeat(b, 360);
+            // Calculating the motion vector based on the input
+            Vector3 moveInput = Vector3.zero;
 
-            // Choosing the shortest path
-            if (Mathf.Abs(b - a) > 180)
+            if (UnityInput.Current.GetKey(isKeyValid(keyList[0]))) moveInput += Vector3.forward;    
+            if (UnityInput.Current.GetKey(isKeyValid(keyList[2]))) moveInput += Vector3.back;       
+            if (UnityInput.Current.GetKey(isKeyValid(keyList[1]))) moveInput += Vector3.left;      
+            if (UnityInput.Current.GetKey(isKeyValid(keyList[3]))) moveInput += Vector3.right;
+
+            // We normalize if the movement is diagonal
+            if (moveInput.magnitude > 1f)
+                moveInput.Normalize();
+
+            // Convert to world coordinates relative to the camera
+            moveInput = cammer.transform.TransformDirection(moveInput);
+
+            // Calculating the target offset (without accumulation)
+            Vector3 targetOffset = moveInput * moveSpeed * Time.deltaTime;
+
+            // Smoothly move the camera to the new position
+            if (MyCammer.moveSmoothTime.Value > 0)
             {
-                if (b > a) a += 360;
-                else b += 360;
+                // Smooth movement
+                cammer.transform.position = Vector3.SmoothDamp(
+                    cammer.transform.position,
+                    cammer.transform.position + targetOffset,
+                    ref currentVelocity,
+                    MyCammer.moveSmoothTime.Value
+                );
             }
-
-            return Mathf.Lerp(a, b, t) % 360;
+            else
+            {
+                // Sudden movement without smoothness
+                cammer.transform.position += targetOffset;
+            }
         }
 
         public void ChangeStates()
@@ -390,7 +409,7 @@ namespace FreeCammer.Scripts
                     fog.enabled.overrideState = !fog.enabled.overrideState;
                     fog.enabled.value = !fog.enabled.value;
                 }
-                if (GUILayout.Button("Reset Speed")) speed = 10f;
+                if (GUILayout.Button("Reset Speed")) moveSpeed = 1000f;
                 if (GUILayout.Button("Reset Light")) intensity = 50f;
                 if (killme)
                 {
